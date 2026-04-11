@@ -17,6 +17,45 @@ def get_display_config_proxy():
         None
     )
 
+def list_monitors():
+    """Prints a clean list of connected monitors and their connectors."""
+    proxy = get_display_config_proxy()
+    state = proxy.GetCurrentState()
+    serial, monitors, logical_monitors, properties = state
+
+    # Create a map for logical monitor information
+    lm_map = {}
+    for lm in logical_monitors:
+        x, y, scale, rot, primary, phys_specs, _ = lm
+        for spec in phys_specs:
+            connector = spec[0]
+            lm_map[connector] = (scale, primary)
+
+    # Prepare data for printing
+    monitor_data = []
+    for monitor_info in monitors:
+        spec, modes, props = monitor_info
+        connector = spec[0]
+        scale, primary = lm_map.get(connector, ("N/A", False))
+        primary_str = "Yes" if primary else "No"
+        monitor_data.append((connector, str(scale), primary_str))
+
+    # Calculate column widths
+    headers = ("CONNECTOR", "SCALE", "PRIMARY")
+    widths = [len(h) for h in headers]
+    for row in monitor_data:
+        for i, val in enumerate(row):
+            widths[i] = max(widths[i], len(val))
+
+    # Print headers
+    fmt = f"{{:<{widths[0] + 2}}}{{:<{widths[1] + 2}}}{{:<{widths[2]}}}"
+    print(fmt.format(*headers))
+    print("-" * (sum(widths) + 4))
+
+    # Print data
+    for row in monitor_data:
+        print(fmt.format(*row))
+
 def to_variant(val):
     """
     Recursively wraps Python types into GLib.Variants.
@@ -69,30 +108,49 @@ def convert_state_to_apply_config(state):
         if new_phys:
             new_lms.append((x, y, scale, rotation, primary, new_phys))
 
-    # Return exactly what ApplyMonitorsConfig expects
     return (serial, 1, new_lms, to_variant(properties))
 
-def apply_scale_reset(target_scale):
+def apply_scale_reset(default_scale, per_monitor_scales):
     proxy = get_display_config_proxy()
     
     # Get current state
     state = proxy.GetCurrentState()
     logical_monitors = state[2]
     
-    # Check if reset is actually needed
-    if all(abs(lm[2] - target_scale) < 0.001 for lm in logical_monitors):
+    # Identify all mismatched monitors
+    mismatches = []
+    for lm in logical_monitors:
+        current_scale = lm[2]
+        phys_specs = lm[5]
+        connectors = [s[0] for s in phys_specs]
+        
+        # Determine the target for this logical group
+        target = per_monitor_scales.get(connectors[0], default_scale)
+        
+        if target is not None and abs(current_scale - target) > 0.001:
+            mismatches.append((connectors, current_scale, target))
+            
+    if not mismatches:
         return
         
-    print(f"Display scale mismatch detected. Resetting to {target_scale}...")
+    for connectors, current, target in mismatches:
+        conn_str = ", ".join(connectors)
+        print(f"Scale mismatch on {conn_str}: current {current}, target {target}")
+    
+    print("Resetting display configuration...")
     
     # Transform current monitor state into a config update
     serial, method, lms, props = convert_state_to_apply_config(state)
     
-    # Update scale to the target
-    updated_lms = [
-        (x, y, float(target_scale), rot, pri, phys) 
-        for x, y, scale, rot, pri, phys in lms
-    ]
+    # Mutate the data
+    updated_lms = []
+    for x, y, scale, rot, pri, phys in lms:
+        connector = phys[0][0]
+        target = per_monitor_scales.get(connector, default_scale)
+        
+        # Use target if specified, otherwise keep current scale
+        final_scale = float(target) if target is not None else scale
+        updated_lms.append((x, y, final_scale, rot, pri, phys))
     
     # Pack the components into the final signature: (uua(iiduba(ssa{sv}))a{sv})
     arg = GLib.Variant.new_tuple(
@@ -104,26 +162,48 @@ def apply_scale_reset(target_scale):
     
     try:
         proxy.call_sync('ApplyMonitorsConfig', arg, Gio.DBusCallFlags.NONE, -1, None)
-        print(f"Successfully reset display scale to {target_scale}")
+        print("Display scale successfully reset.")
     except Exception as e:
         print(f"Failed to reset scale: {e}")
 
-def on_monitors_changed(proxy, sender_name, signal_name, parameters, target_scale):
+def on_monitors_changed(proxy, sender_name, signal_name, parameters, default_scale, per_monitor_scales):
     if signal_name == 'MonitorsChanged':
-        apply_scale_reset(target_scale)
+        apply_scale_reset(default_scale, per_monitor_scales)
 
 def main():
     parser = argparse.ArgumentParser(description="GNOME Display Scale Resetter")
-    parser.add_argument("--scale", type=float, required=True, help="Target display scale (e.g. 1.25)")
+    parser.add_argument("--scale", action='append', help="Target scale. Can be a float (default for all) or 'monitor:float' override. Can be specified multiple times.")
+    parser.add_argument("--list-monitors", action="store_true", help="List all connected monitors and exit")
     args = parser.parse_args()
+
+    if args.list_monitors:
+        list_monitors()
+        return
+
+    if not args.scale:
+        parser.error("--scale is required unless using --list-monitors")
+
+    default_scale = None
+    per_monitor_scales = {}
+    
+    for s in args.scale:
+        if ':' in s:
+            connector, val = s.split(':', 1)
+            per_monitor_scales[connector] = float(val)
+        else:
+            default_scale = float(s)
 
     proxy = get_display_config_proxy()
     
-    proxy.connect("g-signal", on_monitors_changed, args.scale)
-    print(f"Watching for GNOME display scale changes (target: {args.scale})...")
+    proxy.connect("g-signal", on_monitors_changed, default_scale, per_monitor_scales)
+    print(f"Watching for GNOME display scale changes...")
+    if default_scale is not None:
+        print(f"  Default scale: {default_scale}")
+    for conn, scale in per_monitor_scales.items():
+        print(f"  Monitor '{conn}': {scale}")
     
     # Initial check on startup
-    apply_scale_reset(args.scale)
+    apply_scale_reset(default_scale, per_monitor_scales)
     
     GLib.MainLoop().run()
 
