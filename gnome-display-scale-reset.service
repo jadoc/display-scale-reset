@@ -3,6 +3,7 @@ Description=GNOME Display Scale Resetter (to 125%)
 After=graphical-session.target
 
 [Service]
+Environment=PYTHONUNBUFFERED=1
 ExecStart=/usr/bin/python3 /home/jadoc/src/display-scale-reset/display_resetter.py
 Restart=on-failure
 RestartSec=5

@@ -114,7 +114,7 @@ def main():
     )
     
     proxy.connect("g-signal", on_monitors_changed)
-    print("Watching for display scale changes. Press Ctrl+C to stop.")
+    print("Watching for display scale changes.")
     check_and_reset()
     
     loop = GLib.MainLoop()
