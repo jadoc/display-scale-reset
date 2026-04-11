@@ -18,15 +18,18 @@ def get_display_config_proxy():
     )
 
 def to_variant(val):
-    """Generically wraps a basic Python type into a GLib.Variant."""
+    """
+    Recursively wraps Python types into GLib.Variants.
+    Supports: bool, int, float, str, and dict (as a{sv}).
+    """
     if isinstance(val, GLib.Variant):
         return val
+    
+    if isinstance(val, dict):
+        return GLib.Variant('a{sv}', {k: to_variant(v) for k, v in val.items()})
+        
     type_map = {bool: 'b', int: 'i', float: 'd', str: 's'}
     return GLib.Variant(type_map.get(type(val), 's'), val)
-
-def wrap_properties(props_dict):
-    """Converts a standard dict into a D-Bus 'a{sv}' (Array of String to Variant)."""
-    return {k: to_variant(v) for k, v in props_dict.items()}
 
 def convert_state_to_write_data(state):
     """
@@ -66,7 +69,8 @@ def convert_state_to_write_data(state):
         if new_phys:
             new_lms.append((x, y, scale, rotation, primary, new_phys))
 
-    return (serial, 1, new_lms, wrap_properties(properties))
+    # Return exactly what ApplyMonitorsConfig expects
+    return (serial, 1, new_lms, to_variant(properties))
 
 def apply_scale_reset(target_scale):
     proxy = get_display_config_proxy()
@@ -95,7 +99,7 @@ def apply_scale_reset(target_scale):
         GLib.Variant('u', serial),
         GLib.Variant('u', method),
         GLib.Variant('a(iiduba(ssa{sv}))', updated_lms),
-        GLib.Variant('a{sv}', props)
+        props
     )
     
     try:
