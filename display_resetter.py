@@ -6,6 +6,17 @@ import sys
 gi.require_version('Gio', '2.0')
 from gi.repository import Gio, GLib
 
+def get_display_config_proxy():
+    """Sets up and returns a DBus proxy for the GNOME DisplayConfig service."""
+    bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    return Gio.DBusProxy.new_sync(
+        bus, 0, None,
+        'org.gnome.Mutter.DisplayConfig',
+        '/org/gnome/Mutter/DisplayConfig',
+        'org.gnome.Mutter.DisplayConfig',
+        None
+    )
+
 def to_variant(val):
     """Generically wraps a basic Python type into a GLib.Variant."""
     if isinstance(val, GLib.Variant):
@@ -58,14 +69,7 @@ def convert_state_to_write_data(state):
     return (serial, 1, new_lms, wrap_properties(properties))
 
 def apply_scale_reset(target_scale):
-    bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
-    proxy = Gio.DBusProxy.new_sync(
-        bus, 0, None,
-        'org.gnome.Mutter.DisplayConfig',
-        '/org/gnome/Mutter/DisplayConfig',
-        'org.gnome.Mutter.DisplayConfig',
-        None
-    )
+    proxy = get_display_config_proxy()
     
     # Get current state
     state = proxy.GetCurrentState()
@@ -109,14 +113,7 @@ def main():
     parser.add_argument("--scale", type=float, required=True, help="Target display scale (e.g. 1.25)")
     args = parser.parse_args()
 
-    bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
-    proxy = Gio.DBusProxy.new_sync(
-        bus, 0, None,
-        'org.gnome.Mutter.DisplayConfig',
-        '/org/gnome/Mutter/DisplayConfig',
-        'org.gnome.Mutter.DisplayConfig',
-        None
-    )
+    proxy = get_display_config_proxy()
     
     proxy.connect("g-signal", on_monitors_changed, args.scale)
     print(f"Watching for GNOME display scale changes (target: {args.scale})...")
