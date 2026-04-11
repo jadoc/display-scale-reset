@@ -31,7 +31,7 @@ def to_variant(val):
     type_map = {bool: 'b', int: 'i', float: 'd', str: 's'}
     return GLib.Variant(type_map.get(type(val), 's'), val)
 
-def convert_state_to_write_data(state):
+def convert_state_to_apply_config(state):
     """
     Transforms the 'read' data structure to the 'write' data structure.
 
@@ -86,7 +86,7 @@ def apply_scale_reset(target_scale):
     print(f"Display scale mismatch detected. Resetting to {target_scale}...")
     
     # Transform current monitor state into a config update
-    serial, method, lms, props = convert_state_to_write_data(state)
+    serial, method, lms, props = convert_state_to_apply_config(state)
     
     # Update scale to the target
     updated_lms = [
