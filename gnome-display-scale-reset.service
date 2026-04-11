@@ -4,7 +4,7 @@ After=graphical-session.target
 
 [Service]
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/usr/bin/python3 /home/jadoc/src/display-scale-reset/display_resetter.py
+ExecStart=/usr/bin/python3 /home/jadoc/src/display-scale-reset/display_resetter.py --scale 1.25
 Restart=on-failure
 RestartSec=5
 Type=simple

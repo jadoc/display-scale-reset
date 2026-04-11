@@ -1,9 +1,10 @@
 #!/usr/bin/python3
 import gi
+import argparse
+import sys
+
 gi.require_version('Gio', '2.0')
 from gi.repository import Gio, GLib
-
-TARGET_SCALE = 1.25
 
 def to_variant(val):
     """Generically wraps a basic Python type into a GLib.Variant."""
@@ -56,7 +57,7 @@ def convert_state_to_write_data(state):
 
     return (serial, 1, new_lms, wrap_properties(properties))
 
-def apply_scale_reset():
+def apply_scale_reset(target_scale):
     bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
     proxy = Gio.DBusProxy.new_sync(
         bus, 0, None,
@@ -71,17 +72,17 @@ def apply_scale_reset():
     logical_monitors = state[2]
     
     # Check if reset is actually needed
-    if all(abs(lm[2] - TARGET_SCALE) < 0.001 for lm in logical_monitors):
+    if all(abs(lm[2] - target_scale) < 0.001 for lm in logical_monitors):
         return
         
-    print(f"Display scale mismatch detected. Resetting to {TARGET_SCALE}...")
+    print(f"Display scale mismatch detected. Resetting to {target_scale}...")
     
     # Transform current monitor state into a config update
     serial, method, lms, props = convert_state_to_write_data(state)
     
     # Update scale to the target
     updated_lms = [
-        (x, y, float(TARGET_SCALE), rot, pri, phys) 
+        (x, y, float(target_scale), rot, pri, phys) 
         for x, y, scale, rot, pri, phys in lms
     ]
     
@@ -95,15 +96,19 @@ def apply_scale_reset():
     
     try:
         proxy.call_sync('ApplyMonitorsConfig', arg, Gio.DBusCallFlags.NONE, -1, None)
-        print(f"Successfully reset display scale to {TARGET_SCALE}")
+        print(f"Successfully reset display scale to {target_scale}")
     except Exception as e:
         print(f"Failed to reset scale: {e}")
 
-def on_monitors_changed(proxy, sender_name, signal_name, parameters):
+def on_monitors_changed(proxy, sender_name, signal_name, parameters, target_scale):
     if signal_name == 'MonitorsChanged':
-        apply_scale_reset()
+        apply_scale_reset(target_scale)
 
 def main():
+    parser = argparse.ArgumentParser(description="GNOME Display Scale Resetter")
+    parser.add_argument("--scale", type=float, required=True, help="Target display scale (e.g. 1.25)")
+    args = parser.parse_args()
+
     bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
     proxy = Gio.DBusProxy.new_sync(
         bus, 0, None,
@@ -113,11 +118,11 @@ def main():
         None
     )
     
-    proxy.connect("g-signal", on_monitors_changed)
-    print("Watching for GNOME display scale changes...")
+    proxy.connect("g-signal", on_monitors_changed, args.scale)
+    print(f"Watching for GNOME display scale changes (target: {args.scale})...")
     
     # Initial check on startup
-    apply_scale_reset()
+    apply_scale_reset(args.scale)
     
     GLib.MainLoop().run()
 
