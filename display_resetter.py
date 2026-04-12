@@ -2,6 +2,7 @@
 import gi
 import argparse
 import sys
+import signal
 
 gi.require_version('Gio', '2.0')
 from gi.repository import Gio, GLib
@@ -201,8 +202,8 @@ def main():
         return
 
     proxy = get_display_config_proxy()
-    
     proxy.connect("g-signal", on_monitors_changed, default_scale, per_monitor_scales)
+    
     print(f"Watching for GNOME display scale changes...")
     if default_scale is not None:
         print(f"  Default scale: {default_scale}")
@@ -212,7 +213,18 @@ def main():
     # Initial check on startup
     apply_scale_reset(default_scale, per_monitor_scales)
     
-    GLib.MainLoop().run()
+    loop = GLib.MainLoop()
+
+    def signal_handler(sig, frame):
+        loop.quit()
+
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+
+    try:
+        loop.run()
+    except KeyboardInterrupt:
+        pass
 
 if __name__ == "__main__":
     main()
