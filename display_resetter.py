@@ -110,7 +110,7 @@ def convert_state_to_apply_config(state):
 
     return (serial, 1, new_lms, to_variant(properties))
 
-def apply_scale_reset(default_scale, per_monitor_scales):
+def apply_scale_reset(default_scale, per_monitor_scales, force=False):
     proxy = get_display_config_proxy()
     
     # Get current state
@@ -130,14 +130,16 @@ def apply_scale_reset(default_scale, per_monitor_scales):
         if target is not None and abs(current_scale - target) > 0.001:
             mismatches.append((connectors, current_scale, target))
             
-    if not mismatches:
+    if not mismatches and not force:
         return
         
-    for connectors, current, target in mismatches:
-        conn_str = ", ".join(connectors)
-        print(f"Scale mismatch on {conn_str}: current {current}, target {target}")
-    
-    print("Resetting display configuration...")
+    if force:
+        print("Forcing display configuration update...")
+    else:
+        for connectors, current, target in mismatches:
+            conn_str = ", ".join(connectors)
+            print(f"Scale mismatch on {conn_str}: current {current}, target {target}")
+        print("Resetting display configuration...")
     
     # Transform current monitor state into a config update
     serial, method, lms, props = convert_state_to_apply_config(state)
@@ -162,9 +164,9 @@ def apply_scale_reset(default_scale, per_monitor_scales):
     
     try:
         proxy.call_sync('ApplyMonitorsConfig', arg, Gio.DBusCallFlags.NONE, -1, None)
-        print("Display scale successfully reset.")
+        print("Display scale successfully set.")
     except Exception as e:
-        print(f"Failed to reset scale: {e}")
+        print(f"Failed to set scale: {e}")
 
 def on_monitors_changed(proxy, sender_name, signal_name, parameters, default_scale, per_monitor_scales):
     if signal_name == 'MonitorsChanged':
@@ -174,6 +176,7 @@ def main():
     parser = argparse.ArgumentParser(description="GNOME Display Scale Resetter")
     parser.add_argument("--scale", action='append', help="Target scale. Can be a float (default for all) or 'monitor:float' override. Can be specified multiple times.")
     parser.add_argument("--list-monitors", action="store_true", help="List all connected monitors and exit")
+    parser.add_argument("--force-once", action="store_true", help="Apply the scale configuration once and exit immediately")
     args = parser.parse_args()
 
     if args.list_monitors:
@@ -192,6 +195,10 @@ def main():
             per_monitor_scales[connector] = float(val)
         else:
             default_scale = float(s)
+
+    if args.force_once:
+        apply_scale_reset(default_scale, per_monitor_scales, force=True)
+        return
 
     proxy = get_display_config_proxy()
     
