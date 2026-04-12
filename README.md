@@ -1,10 +1,10 @@
 # GNOME Display Scale Resetter
 
-A lightweight Python utility to monitor and automatically reset GNOME/Wayland display scaling.
+A lightweight Python utility to watch and automatically reset GNOME/Wayland display scaling.
 
 ## Why
 
-Resizing the window of a GNOME desktop environment is running inside a VM triggers a display reconfiguration. GNOME's window manager (Mutter) frequently defaults these new resolutions to a 100% scale regardless of the existing display scale setting.
+Resizing the window of a GNOME desktop environment running inside a VM triggers a display reconfiguration. GNOME's window manager (Mutter) frequently defaults these new resolutions to a 100% scale regardless of the existing display scale setting.
 
 ## How
 
@@ -38,7 +38,7 @@ This script serves as a watchdog for display configurations. It listens for `Mon
     
     Examples:
     - Global scale: `--scale 1.25`
-    - Per-monitor:  `--scale eDP-1:1.25 --scale HDMI-1:1.0`
+    - Per-display:  `--scale eDP-1:1.25 --scale HDMI-1:1.0`
 
 3.  **Install and start the service:**
     ```bash
@@ -51,17 +51,17 @@ This script serves as a watchdog for display configurations. It listens for `Mon
 
 ## Usage
 
-### Listing Monitors
-Identify connected monitors:
+### Listing Displays
+Identify connected displays:
 ```bash
-~/libexec/display-scale-reset.py --list-monitors
+~/libexec/display-scale-reset.py --list-displays
 ```
 
 Example output:
 ```text
 CONNECTOR       SCALE      PRIMARY
 ----------------------------------
-eDP-1           1.5        Yes
+eDP-1           1.25       Yes
 HDMI-1          1.0        No
 Virtual-1       1.25       No
 ```
@@ -73,19 +73,19 @@ Force apply a scale configuration and exit:
 ```
 
 ### Watching for Changes
-Watch for scale changes on all monitors and set all to 150%:
+Watch for scale changes on all displays and set all to 150%:
 ```bash
 ~/libexec/display-scale-reset.py --scale 1.5
 ```
 
-### Targeting a Single Monitor
-Operate on only one monitor:
+### Targeting a Single Display
+Operate on only one display:
 ```bash
 ~/libexec/display-scale-reset.py --scale HDMI-1:1.25
 ```
 
-### Multiple Monitors
-Custom scale for two monitors with a default of 150% for any other monitor.
+### Multiple Displays
+Custom scale for two displays with a default of 150% for any other display.
 ```bash
 ~/libexec/display-scale-reset.py --scale 1.5 --scale eDP-1:1.25 --scale HDMI-1:1.0
 ```
