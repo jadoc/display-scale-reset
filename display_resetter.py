@@ -18,45 +18,6 @@ def get_display_config_proxy():
         None
     )
 
-def list_monitors():
-    """Prints a clean list of connected monitors and their connectors."""
-    proxy = get_display_config_proxy()
-    state = proxy.GetCurrentState()
-    serial, monitors, logical_monitors, properties = state
-
-    # Create a map for logical monitor information
-    lm_map = {}
-    for lm in logical_monitors:
-        x, y, scale, rot, primary, phys_specs, _ = lm
-        for spec in phys_specs:
-            connector = spec[0]
-            lm_map[connector] = (scale, primary)
-
-    # Prepare data for printing
-    monitor_data = []
-    for monitor_info in monitors:
-        spec, modes, props = monitor_info
-        connector = spec[0]
-        scale, primary = lm_map.get(connector, ("N/A", False))
-        primary_str = "Yes" if primary else "No"
-        monitor_data.append((connector, str(scale), primary_str))
-
-    # Calculate column widths
-    headers = ("CONNECTOR", "SCALE", "PRIMARY")
-    widths = [len(h) for h in headers]
-    for row in monitor_data:
-        for i, val in enumerate(row):
-            widths[i] = max(widths[i], len(val))
-
-    # Print headers
-    fmt = f"{{:<{widths[0] + 2}}}{{:<{widths[1] + 2}}}{{:<{widths[2]}}}"
-    print(fmt.format(*headers))
-    print("-" * (sum(widths) + 4))
-
-    # Print data
-    for row in monitor_data:
-        print(fmt.format(*row))
-
 def to_variant(val):
     """
     Recursively wraps Python types into GLib.Variants.
@@ -171,6 +132,77 @@ def on_monitors_changed(proxy, sender_name, signal_name, parameters, default_sca
     if signal_name == 'MonitorsChanged':
         apply_scale_reset(proxy, default_scale, per_monitor_scales)
 
+def list_monitors():
+    """Prints a clean list of connected monitors and their connectors."""
+    proxy = get_display_config_proxy()
+    state = proxy.GetCurrentState()
+    serial, monitors, logical_monitors, properties = state
+
+    # Create a map for logical monitor information
+    lm_map = {}
+    for lm in logical_monitors:
+        x, y, scale, rot, primary, phys_specs, _ = lm
+        for spec in phys_specs:
+            connector = spec[0]
+            lm_map[connector] = (scale, primary)
+
+    # Prepare data for printing
+    monitor_data = []
+    for monitor_info in monitors:
+        spec, modes, props = monitor_info
+        connector = spec[0]
+        scale, primary = lm_map.get(connector, ("N/A", False))
+        primary_str = "Yes" if primary else "No"
+        monitor_data.append((connector, str(scale), primary_str))
+
+    # Calculate column widths
+    headers = ("CONNECTOR", "SCALE", "PRIMARY")
+    widths = [len(h) for h in headers]
+    for row in monitor_data:
+        for i, val in enumerate(row):
+            widths[i] = max(widths[i], len(val))
+
+    # Print headers
+    fmt = f"{{:<{widths[0] + 2}}}{{:<{widths[1] + 2}}}{{:<{widths[2]}}}"
+    print(fmt.format(*headers))
+    print("-" * (sum(widths) + 4))
+
+    # Print data
+    for row in monitor_data:
+        print(fmt.format(*row))
+
+def force_once(default_scale, per_monitor_scales):
+    """Force applies the scale configuration just once."""
+    proxy = get_display_config_proxy()
+    apply_scale_reset(proxy, default_scale, per_monitor_scales, force=True)
+
+def start_monitoring(default_scale, per_monitor_scales):
+    """Sets up signal handlers and runs the GLib main loop for continuous monitoring."""
+    proxy = get_display_config_proxy()
+    proxy.connect("g-signal", on_monitors_changed, default_scale, per_monitor_scales)
+    
+    print(f"Watching for GNOME display scale changes...")
+    if default_scale is not None:
+        print(f"  Default scale: {default_scale}")
+    for conn, scale in per_monitor_scales.items():
+        print(f"  Monitor '{conn}': {scale}")
+    
+    # Initial check on startup
+    apply_scale_reset(proxy, default_scale, per_monitor_scales)
+    
+    loop = GLib.MainLoop()
+
+    def signal_handler(sig, frame):
+        loop.quit()
+
+    signal.signal(signal.SIGTERM, signal_handler)
+    signal.signal(signal.SIGINT, signal_handler)
+
+    try:
+        loop.run()
+    except KeyboardInterrupt:
+        pass
+
 def main():
     parser = argparse.ArgumentParser(description="GNOME Display Scale Resetter")
     parser.add_argument("--scale", action='append', help="Target scale. Can be a float (default for all) or 'monitor:float' override. Can be specified multiple times.")
@@ -195,35 +227,11 @@ def main():
         else:
             default_scale = float(s)
 
-    proxy = get_display_config_proxy()
-
     if args.force_once:
-        apply_scale_reset(proxy, default_scale, per_monitor_scales, force=True)
+        force_once(default_scale, per_monitor_scales)
         return
-
-    proxy.connect("g-signal", on_monitors_changed, default_scale, per_monitor_scales)
-    
-    print(f"Watching for GNOME display scale changes...")
-    if default_scale is not None:
-        print(f"  Default scale: {default_scale}")
-    for conn, scale in per_monitor_scales.items():
-        print(f"  Monitor '{conn}': {scale}")
-    
-    # Initial check on startup
-    apply_scale_reset(proxy, default_scale, per_monitor_scales)
-    
-    loop = GLib.MainLoop()
-
-    def signal_handler(sig, frame):
-        loop.quit()
-
-    signal.signal(signal.SIGTERM, signal_handler)
-    signal.signal(signal.SIGINT, signal_handler)
-
-    try:
-        loop.run()
-    except KeyboardInterrupt:
-        pass
+        
+    start_monitoring(default_scale, per_monitor_scales)
 
 if __name__ == "__main__":
     main()
