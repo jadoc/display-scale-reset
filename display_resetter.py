@@ -111,9 +111,7 @@ def convert_state_to_apply_config(state):
 
     return (serial, 1, new_lms, to_variant(properties))
 
-def apply_scale_reset(default_scale, per_monitor_scales, force=False):
-    proxy = get_display_config_proxy()
-    
+def apply_scale_reset(proxy, default_scale, per_monitor_scales, force=False):
     # Get current state
     state = proxy.GetCurrentState()
     logical_monitors = state[2]
@@ -171,7 +169,7 @@ def apply_scale_reset(default_scale, per_monitor_scales, force=False):
 
 def on_monitors_changed(proxy, sender_name, signal_name, parameters, default_scale, per_monitor_scales):
     if signal_name == 'MonitorsChanged':
-        apply_scale_reset(default_scale, per_monitor_scales)
+        apply_scale_reset(proxy, default_scale, per_monitor_scales)
 
 def main():
     parser = argparse.ArgumentParser(description="GNOME Display Scale Resetter")
@@ -197,11 +195,12 @@ def main():
         else:
             default_scale = float(s)
 
+    proxy = get_display_config_proxy()
+
     if args.force_once:
-        apply_scale_reset(default_scale, per_monitor_scales, force=True)
+        apply_scale_reset(proxy, default_scale, per_monitor_scales, force=True)
         return
 
-    proxy = get_display_config_proxy()
     proxy.connect("g-signal", on_monitors_changed, default_scale, per_monitor_scales)
     
     print(f"Watching for GNOME display scale changes...")
@@ -211,7 +210,7 @@ def main():
         print(f"  Monitor '{conn}': {scale}")
     
     # Initial check on startup
-    apply_scale_reset(default_scale, per_monitor_scales)
+    apply_scale_reset(proxy, default_scale, per_monitor_scales)
     
     loop = GLib.MainLoop()
 
