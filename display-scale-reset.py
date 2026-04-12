@@ -3,6 +3,7 @@ import gi
 import argparse
 import sys
 import signal
+import os
 
 gi.require_version('Gio', '2.0')
 from gi.repository import Gio, GLib
@@ -203,6 +204,9 @@ def start_monitoring(default_scale, per_display_scales):
         pass
 
 def main():
+    if os.environ.get("XDG_SESSION_TYPE") != "wayland":
+        print("Warning: XDG_SESSION_TYPE is not 'wayland'.")
+
     parser = argparse.ArgumentParser(description="GNOME Display Scale Resetter")
     parser.add_argument("--scale", action='append', help="Target scale. Can be a float (default for all) or 'display:float' override. Can be specified multiple times.")
     parser.add_argument("--list-displays", action="store_true", help="List all connected displays and exit")

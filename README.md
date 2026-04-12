@@ -1,10 +1,12 @@
 # GNOME Display Scale Resetter
 
-A lightweight Python utility to watch and automatically reset GNOME/Wayland display scaling.
+A lightweight Python utility to watch and automatically reset GNOME display scaling when running under Wayland.
 
 ## Why
 
-Resizing the window of a GNOME desktop environment running inside a VM triggers a display reconfiguration. GNOME's window manager (Mutter) frequently defaults these new resolutions to a 100% scale regardless of the existing display scale setting.
+Resizing the window of a GNOME desktop environment running inside a VM on Wayland triggers a display reconfiguration. GNOME's Wayland compositor (Mutter) frequently defaults these new resolutions to a 100% scale regardless of the existing display scale setting.
+
+This tool is irrelevant when running under X11, which doesn't support generic display scaling.
 
 ## How
 
