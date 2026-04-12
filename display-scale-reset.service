@@ -1,10 +1,14 @@
 [Unit]
-Description=GNOME Display Scale Resetter (to 125%)
+Description=GNOME Display Scale Resetter
 After=graphical-session.target
 
 [Service]
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/home/jadoc/src/display-scale-reset/display-scale-reset.py --scale 1.25
+# NOTE: Update the --scale argument below.
+# Examples:
+#   Global scale: --scale 1.25
+#   Per-monitor:  --scale eDP-1:1.25 --scale HDMI-1:1.0
+ExecStart=%h/libexec/display-scale-reset.py --scale {{SCALE}}
 Restart=on-failure
 RestartSec=5
 Type=simple
