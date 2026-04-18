@@ -36,8 +36,8 @@ This script serves as a watchdog for display configurations. It listens for `Mon
     ```
 
 2.  **Configure the systemd service:**
-    Open `display-scale-reset.service` for editing and replace `{{SCALE}}` with the preferred scale configuration. 
-    
+    Open `display-scale-reset.service` for editing and replace `{{SCALE}}` with the preferred scale configuration.
+
     Examples:
     - Global scale: `--scale 1.25`
     - Per-display:  `--scale eDP-1:1.25 --scale HDMI-1:1.0`

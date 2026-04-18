@@ -26,10 +26,10 @@ def to_variant(val):
     """
     if isinstance(val, GLib.Variant):
         return val
-    
+
     if isinstance(val, dict):
         return GLib.Variant('a{sv}', {k: to_variant(v) for k, v in val.items()})
-        
+
     type_map = {bool: 'b', int: 'i', float: 'd', str: 's'}
     return GLib.Variant(type_map.get(type(val), 's'), val)
 
@@ -46,7 +46,7 @@ def convert_state_to_config(state):
     (serial:u, method:u, logical_monitors:a(iiduba(ssa{sv})), properties:a{sv})
     """
     serial, monitors, logical_monitors, properties = state
-    
+
     # Map physical monitors to their currently active Mode ID
     active_modes = {}
     for spec, modes, _ in monitors:
@@ -60,13 +60,13 @@ def convert_state_to_config(state):
     new_lms = []
     for lm in logical_monitors:
         x, y, scale, rotation, primary, phys_specs, _ = lm
-        
+
         # Transform Physical Monitors: (ssss) -> (ssa{sv})
         new_phys = [
-            (s[0], active_modes[s], {}) 
+            (s[0], active_modes[s], {})
             for s in phys_specs if s in active_modes
         ]
-        
+
         if new_phys:
             new_lms.append((x, y, scale, rotation, primary, new_phys))
 
@@ -86,10 +86,10 @@ def calculate_target_scales(display_state, default_scale, per_display_scales):
         phys_specs = lm[5]
         connectors = [s[0] for s in phys_specs]
         target = current_scale
-        
+
         # Determine preferred scale and snap to closest supported
         preferred = next((per_display_scales[c] for c in connectors if c in per_display_scales), default_scale)
-        
+
         if preferred is not None:
             # Snap to the closest supported scale for the first physical monitor in the group
             monitor_spec = phys_specs[0]
@@ -106,7 +106,7 @@ def calculate_target_scales(display_state, default_scale, per_display_scales):
                 conn_str = ", ".join(connectors)
                 print(f"Scale mismatch on display {conn_str}: current {current_scale}, preferred {preferred}, closest supported {target}")
                 mismatch = True
-            
+
         target_scales.append(target)
 
     return target_scales, mismatch
@@ -120,15 +120,15 @@ def apply_scale_reset(proxy, default_scale, per_display_scales, force=False):
 
     if not mismatch and not force:
         return
-        
+
     if force:
         print("Forcing display configuration update...")
     else:
         print("Resetting display configuration...")
-    
+
     # Use the display state data structure to constuct a monitor config update
     serial, method, lms, props = convert_state_to_config(display_state)
-    
+
     # Mutate the configuration data
     for i, lm in enumerate(lms):
         # Update scale in-place: lms[i] is (x, y, scale, rotation, primary, phys_monitors)
@@ -141,7 +141,7 @@ def apply_scale_reset(proxy, default_scale, per_display_scales, force=False):
         GLib.Variant('a(iiduba(ssa{sv}))', lms),
         props
     )
-    
+
     try:
         proxy.call_sync('ApplyMonitorsConfig', arg, Gio.DBusCallFlags.NONE, -1, None)
         print("Display scale successfully set.")
@@ -200,16 +200,16 @@ def start_monitoring(default_scale, per_display_scales):
     """Sets up signal handlers and runs the GLib main loop for continuous monitoring."""
     proxy = get_display_config_proxy()
     proxy.connect("g-signal", on_displays_changed, default_scale, per_display_scales)
-    
+
     print(f"Watching for GNOME display scale changes...")
     if default_scale is not None:
         print(f"  Default scale: {default_scale}")
     for conn, scale in per_display_scales.items():
         print(f"  Display '{conn}': {scale}")
-    
+
     # Initial check on startup
     apply_scale_reset(proxy, default_scale, per_display_scales)
-    
+
     loop = GLib.MainLoop()
 
     def signal_handler(sig, frame):
@@ -242,7 +242,7 @@ def main():
 
     default_scale = None
     per_display_scales = {}
-    
+
     for s in args.scale:
         if ':' in s:
             connector, val = s.split(':', 1)
@@ -253,7 +253,7 @@ def main():
     if args.force_once:
         force_once(default_scale, per_display_scales)
         return
-        
+
     start_monitoring(default_scale, per_display_scales)
 
 if __name__ == "__main__":
