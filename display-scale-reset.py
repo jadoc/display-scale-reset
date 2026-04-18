@@ -33,6 +33,23 @@ def to_variant(val):
     type_map = {bool: 'b', int: 'i', float: 'd', str: 's'}
     return GLib.Variant(type_map.get(type(val), 's'), val)
 
+def closest_supported_scale(target, monitor_spec, monitors):
+    """
+    Finds the supported scale for a specific monitor that is closest to the target.
+
+    Parameters:
+    target: The desired floating point scale.
+    monitor_spec: The (connector, vendor, product, serial) tuple for the monitor.
+    monitors: The list of monitors from the display state.
+    """
+    for spec, modes, _ in monitors:
+        if spec == monitor_spec:
+            current_mode = next((m for m in modes if m[6].get('is-current')), None)
+            if current_mode:
+                supported_scales = current_mode[5]
+                return min(supported_scales, key=lambda s: abs(s - target))
+    return target
+
 def convert_state_to_config(state):
     """
     Transforms the 'read' data structure to the 'write' data structure.
@@ -75,30 +92,37 @@ def convert_state_to_config(state):
 def apply_scale_reset(proxy, default_scale, per_display_scales, force=False):
     # Get current display state
     display_state = proxy.GetCurrentState()
-    logical_monitors = display_state[2]
+    serial, monitors, logical_monitors, properties = display_state
     
     # Identify all mismatched displays
-    mismatches = []
+    needs_reset = force
+    target_scales = []
     for lm in logical_monitors:
         current_scale = lm[2]
         phys_specs = lm[5]
         connectors = [s[0] for s in phys_specs]
+        target = current_scale
         
-        # Determine the target for this logical group
-        target = per_display_scales.get(connectors[0], default_scale)
+        # Determine the preferred target scale for this logical group
+        preferred = next((per_display_scales[c] for c in connectors if c in per_display_scales), default_scale)
         
-        if target is not None and abs(current_scale - target) > 0.001:
-            mismatches.append((connectors, current_scale, target))
+        if preferred is not None:
+            # Snap to closest supported scale
+            target = closest_supported_scale(preferred, phys_specs[0], monitors)
+
+            if abs(current_scale - target) > 0.001:
+                conn_str = ", ".join(connectors)
+                print(f"Scale mismatch on display {conn_str}: current {current_scale}, preferred {preferred}, closest supported {target}")
+                needs_reset = True
             
-    if not mismatches and not force:
+        target_scales.append(target)
+
+    if not needs_reset:
         return
         
     if force:
         print("Forcing display configuration update...")
     else:
-        for connectors, current, target in mismatches:
-            conn_str = ", ".join(connectors)
-            print(f"Scale mismatch on display {conn_str}: current {current}, target {target}")
         print("Resetting display configuration...")
     
     # Use the display state data structure to constuct a monitor config update
@@ -106,12 +130,9 @@ def apply_scale_reset(proxy, default_scale, per_display_scales, force=False):
     
     # Mutate the data
     updated_lms = []
-    for x, y, scale, rot, pri, phys in lms:
-        connector = phys[0][0]
-        target = per_display_scales.get(connector, default_scale)
-        
-        # Use target if specified, otherwise keep current scale
-        final_scale = float(target) if target is not None else scale
+    for i, lm in enumerate(lms):
+        x, y, scale, rot, pri, phys = lm
+        final_scale = float(target_scales[i])
         updated_lms.append((x, y, final_scale, rot, pri, phys))
     
     # Pack the components into the final signature: (uua(iiduba(ssa{sv}))a{sv})
