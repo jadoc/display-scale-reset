@@ -10,7 +10,7 @@ This tool is irrelevant when running under X11, which doesn't support generic di
 
 ## How
 
-This script serves as a watchdog for display configurations. It listens for `MonitorsChanged` signals via the GNOME Mutter DBus API. When a change is detected, such as a window resize, it checks the current scale, and resets to the specified target scale upon a mismatch.
+This script serves as a watchdog for display configurations. It listens for `MonitorsChanged` signals via the GNOME Mutter DBus API. When a change is detected, such as a VM window resize or physical display hotplug, it checks the current scale and resets to the specified target scale upon a mismatch.
 
 ## Features
 
@@ -18,7 +18,10 @@ This script serves as a watchdog for display configurations. It listens for `Mon
 - Can specify:
   - Separate scaling factors for each display.
   - A default scaling factor for any display not listed by name.
+- Automatically "snaps" the preferred scale to the closest value supported by Mutter for each display's current resolution.
+  - Specifying a display in a mirror group will scale the entire group based on the supported scales of the first display in that group.
 - Runs as a user systemd service that automatically starts on login.
+  - Named displays do not need to be present when the service starts.
 
 ## Prerequisites
 
