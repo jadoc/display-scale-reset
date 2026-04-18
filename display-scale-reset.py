@@ -33,23 +33,6 @@ def to_variant(val):
     type_map = {bool: 'b', int: 'i', float: 'd', str: 's'}
     return GLib.Variant(type_map.get(type(val), 's'), val)
 
-def closest_supported_scale(target, monitor_spec, monitors):
-    """
-    Finds the supported scale for a specific monitor that is closest to the target.
-
-    Parameters:
-    target: The desired floating point scale.
-    monitor_spec: The (connector, vendor, product, serial) tuple for the monitor.
-    monitors: The list of monitors from the display state.
-    """
-    for spec, modes, _ in monitors:
-        if spec == monitor_spec:
-            current_mode = next((m for m in modes if m[6].get('is-current')), None)
-            if current_mode:
-                supported_scales = current_mode[5]
-                return min(supported_scales, key=lambda s: abs(s - target))
-    return target
-
 def convert_state_to_config(state):
     """
     Transforms the 'read' data structure to the 'write' data structure.
@@ -89,35 +72,53 @@ def convert_state_to_config(state):
 
     return (serial, 1, new_lms, to_variant(properties))
 
-def apply_scale_reset(proxy, default_scale, per_display_scales, force=False):
-    # Get current display state
-    display_state = proxy.GetCurrentState()
-    serial, monitors, logical_monitors, properties = display_state
-    
-    # Identify all mismatched displays
-    needs_reset = force
+def calculate_target_scales(display_state, default_scale, per_display_scales):
+    """
+    Calculates the best supported target scale for each logical monitor.
+    Returns a list of target scales and a boolean indicating if any mismatch was detected.
+    """
+    _, monitors, logical_monitors, _ = display_state
     target_scales = []
+    mismatch = False
+
     for lm in logical_monitors:
         current_scale = lm[2]
         phys_specs = lm[5]
         connectors = [s[0] for s in phys_specs]
         target = current_scale
         
-        # Determine the preferred target scale for this logical group
+        # Determine preferred scale and snap to closest supported
         preferred = next((per_display_scales[c] for c in connectors if c in per_display_scales), default_scale)
         
         if preferred is not None:
-            # Snap to closest supported scale
-            target = closest_supported_scale(preferred, phys_specs[0], monitors)
+            # Snap to the closest supported scale for the first physical monitor in the group
+            monitor_spec = phys_specs[0]
+            target = preferred
+            for spec, modes, _ in monitors:
+                if spec == monitor_spec:
+                    current_mode = next((m for m in modes if m[6].get('is-current')), None)
+                    if current_mode:
+                        supported_scales = current_mode[5]
+                        target = min(supported_scales, key=lambda s: abs(s - preferred))
+                        break
 
             if abs(current_scale - target) > 0.001:
                 conn_str = ", ".join(connectors)
                 print(f"Scale mismatch on display {conn_str}: current {current_scale}, preferred {preferred}, closest supported {target}")
-                needs_reset = True
+                mismatch = True
             
         target_scales.append(target)
 
-    if not needs_reset:
+    return target_scales, mismatch
+
+def apply_scale_reset(proxy, default_scale, per_display_scales, force=False):
+    # Get current display state
+    display_state = proxy.GetCurrentState()
+
+    # Calculate target scales and detect mismatches
+    target_scales, mismatch = calculate_target_scales(display_state, default_scale, per_display_scales)
+
+    if not mismatch and not force:
         return
         
     if force:
@@ -128,18 +129,16 @@ def apply_scale_reset(proxy, default_scale, per_display_scales, force=False):
     # Use the display state data structure to constuct a monitor config update
     serial, method, lms, props = convert_state_to_config(display_state)
     
-    # Mutate the data
-    updated_lms = []
+    # Mutate the configuration data
     for i, lm in enumerate(lms):
-        x, y, scale, rot, pri, phys = lm
-        final_scale = float(target_scales[i])
-        updated_lms.append((x, y, final_scale, rot, pri, phys))
-    
+        # Update scale in-place: lms[i] is (x, y, scale, rotation, primary, phys_monitors)
+        lms[i] = (lm[0], lm[1], float(target_scales[i]), lm[3], lm[4], lm[5])
+
     # Pack the components into the final signature: (uua(iiduba(ssa{sv}))a{sv})
     arg = GLib.Variant.new_tuple(
         GLib.Variant('u', serial),
         GLib.Variant('u', method),
-        GLib.Variant('a(iiduba(ssa{sv}))', updated_lms),
+        GLib.Variant('a(iiduba(ssa{sv}))', lms),
         props
     )
     
