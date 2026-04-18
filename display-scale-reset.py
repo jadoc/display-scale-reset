@@ -106,6 +106,9 @@ def calculate_target_scales(display_state, default_scale, per_display_scales):
                 conn_str = ", ".join(connectors)
                 print(f"Scale mismatch on display {conn_str}: current {current_scale}, preferred {preferred}, closest supported {target}")
                 mismatch = True
+            elif abs(preferred - target) > 0.001:
+                conn_str = ", ".join(connectors)
+                print(f"Display {conn_str} already at closest supported scale: current {current_scale}, preferred {preferred}, closest supported {target}")
 
         target_scales.append(target)
 
