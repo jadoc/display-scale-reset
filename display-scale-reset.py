@@ -128,6 +128,9 @@ def apply_scale_reset(proxy, default_scale, per_display_scales, force=False):
                          or None if only specific displays are managed.
     per_display_scales:  A dict mapping connector names to preferred scale floats.
     force:               If True, applies the configuration even if no mismatch is detected.
+
+    Returns:
+    True if the operation was successful or not needed, False on error.
     """
     # Get current display state
     display_state = proxy.GetCurrentState()
@@ -136,7 +139,7 @@ def apply_scale_reset(proxy, default_scale, per_display_scales, force=False):
     target_scales, mismatch = calculate_target_scales(display_state, default_scale, per_display_scales)
 
     if not mismatch and not force:
-        return
+        return True
 
     if force:
         print("Forcing display configuration update...")
@@ -162,8 +165,10 @@ def apply_scale_reset(proxy, default_scale, per_display_scales, force=False):
     try:
         proxy.call_sync('ApplyMonitorsConfig', arg, Gio.DBusCallFlags.NONE, -1, None)
         print("Display scale successfully set.")
+        return True
     except Exception as e:
         print(f"Failed to set scale: {e}")
+        return False
 
 def on_displays_changed(proxy, sender_name, signal_name, parameters, default_scale, per_display_scales):
     if signal_name == 'MonitorsChanged':
@@ -214,7 +219,8 @@ def list_displays():
 def force_once(default_scale, per_display_scales):
     """Force applies the scale configuration just once."""
     proxy = get_display_config_proxy()
-    apply_scale_reset(proxy, default_scale, per_display_scales, force=True)
+    if not apply_scale_reset(proxy, default_scale, per_display_scales, force=True):
+        sys.exit(1)
 
 def start_monitoring(default_scale, per_display_scales):
     """Sets up signal handlers and runs the GLib main loop for continuous monitoring."""
