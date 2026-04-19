@@ -174,21 +174,24 @@ def list_displays():
     for monitor_info in monitors:
         spec, modes, props = monitor_info
         connector = spec[0]
+
+        current_mode = next((m for m in modes if m[6].get('is-current')), None)
+        resolution = f"{current_mode[1]}x{current_mode[2]}" if current_mode else "Unknown"
         scale, primary = lm_map.get(connector, ("N/A", False))
         primary_str = "Yes" if primary else "No"
-        display_data.append((connector, str(scale), primary_str))
+        display_data.append((connector, str(scale), primary_str, resolution))
 
     # Calculate column widths
-    headers = ("CONNECTOR", "SCALE", "PRIMARY")
+    headers = ("CONNECTOR", "SCALE", "PRIMARY", "RESOLUTION")
     widths = [len(h) for h in headers]
     for row in display_data:
         for i, val in enumerate(row):
             widths[i] = max(widths[i], len(val))
 
     # Print headers
-    fmt = f"{{:<{widths[0] + 2}}}{{:<{widths[1] + 2}}}{{:<{widths[2]}}}"
+    fmt = f"{{:<{widths[0] + 2}}}{{:<{widths[1] + 2}}}{{:<{widths[2] + 2}}}{{:<{widths[3]}}}"
     print(fmt.format(*headers))
-    print("-" * (sum(widths) + 4))
+    print("-" * (sum(widths) + 6))
 
     # Print data
     for row in display_data:
