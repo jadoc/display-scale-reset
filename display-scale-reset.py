@@ -115,6 +115,20 @@ def calculate_target_scales(display_state, default_scale, per_display_scales):
     return target_scales, mismatch
 
 def apply_scale_reset(proxy, default_scale, per_display_scales, force=False):
+    """
+    Orchestrates the display scale reset process. 
+    
+    Fetches the current state, calculates target scales (snapping to supported 
+    values), and applies the new configuration if a mismatch is detected or 
+    if a reset is forced.
+
+    Parameters:
+    proxy:               The Gio.DBusProxy for org.gnome.Mutter.DisplayConfig.
+    default_scale:       A float representing the fallback scale for all displays, 
+                         or None if only specific displays are managed.
+    per_display_scales:  A dict mapping connector names to preferred scale floats.
+    force:               If True, applies the configuration even if no mismatch is detected.
+    """
     # Get current display state
     display_state = proxy.GetCurrentState()
 
